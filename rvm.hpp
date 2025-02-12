@@ -1,20 +1,26 @@
 #pragma once
 
 #include <cstdint>
+#include <cstdio>
 #include <stack>
+#include <string_view>
+#include <tuple>
 #include <variant>
 #include <vector>
 
 namespace rvm {
-using u8 = uint8_t ;
-using u64 = uint64_t ;
+using u8  = uint8_t;
+using u16 = uint16_t;
+using u32 = uint32_t;
+using u64 = uint64_t;
 
+class Error;
 class Object;
 class VM;
 using Stack = std::stack<Object>;
 using Heap = std::vector<Object>;
 
-enum class InstructionType: u8 {
+enum class InstructionKind: u8 {
     Nop,  // No operation, do nothing
     Push, // Push the following object onto the stack
 
@@ -25,14 +31,14 @@ enum class InstructionType: u8 {
     Last,
 };
 
-static_assert(InstructionType::Last <= static_cast<InstructionType>((1 << 7)), "The last bit is reserved for multi byte instructions");
+static_assert(InstructionKind::Last <= static_cast<InstructionKind>((1 << 7)), "The last bit is reserved for multi byte instructions");
 
 struct Instruction {
-    InstructionType type;
+    InstructionKind type;
     Object         *value;
 };
 
-enum class ObjectType: u8 {
+enum class ObjectKind: u8 {
     U64,
     Pointer,
 
@@ -41,16 +47,38 @@ enum class ObjectType: u8 {
 
 class Object {
 public:
-    ObjectType        type;
+    ObjectKind        type;
     std::variant<u64> data;
 };
 
+std::vector<Instruction> bytecode_from_file(std::string_view filename, Error **error);
+std::vector<Instruction> bytecode_from_file(FILE *file, Error **error);
+
 class VM {
 public:
-    u64   pc;
-    Stack stack;
-    Heap  heap;
+    u64                      pc;
+    Stack                    stack;
+    Heap                     heap;
+    std::vector<Instruction> bytecode;
+};
+
+enum class ErrorKind {
+    InvalidObject,
+    InvalidInstruction,
+
+    FileNotFound,
+    FileError,
+    UnexpectedEOF
+};
+
+class Error {
+public:
+    Error(ErrorKind kind, char const *error_value = "", bool cleanup_error_value = false);
+    Error(ErrorKind kind, std::tuple<char const*, bool> error_value = {"", false});
+    ErrorKind kind;
+    char const *error_value = "";
+    bool cleanup_error_value = false;
+    char const *what();
+    ~Error();
 };
 }
-
-

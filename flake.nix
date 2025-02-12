@@ -23,7 +23,7 @@
         nativeBuildInputs = with pkgs; [
           meson
           ninja
-          gcc
+          clang
         ];
 
         enableParallelBuilding = true;
@@ -38,12 +38,24 @@
     devShells = forAllSystems (system: let
       pkgs = nixpkgsFor.${system};
     in {
-      default = pkgs.mkShell {
+      default = with pkgs; let 
+          llvm = llvmPackages_latest;
+          in
+          pkgs.mkShell.override { 
+          stdenv = clangStdenv;
+        } {
         buildInputs = with pkgs; [
+          llvm.libcxx
+          llvm.libllvm
+
+          clang-tools
           meson
           ninja
-          gcc
+          clang
         ];
+        shellHook = ''
+          PATH="${pkgs.clang-tools}/bin:$PATH"
+        '';
       };
     });
   };

@@ -1,7 +1,7 @@
 project('rvm', 'cpp',
   version : '0.1',
-  default_options : ['warning_level=3', 'cpp_std=c20'])
+  default_options : ['warning_level=3', 'cpp_std=c++20'])
 
 executable('rvm',
-           ['main.c', 'rvm.cpp'],
+           ['main.cpp', 'rvm.cpp'],
            install : true)
