@@ -5,10 +5,12 @@
 #include <cstdlib>
 #include <cstring>
 #include <tuple>
+#include <variant>
 #include <vector>
 #include <format>
 
 namespace rvm {
+
 
 Object *object_from_file(FILE *file, Error **error);
 
@@ -25,6 +27,60 @@ std::tuple<char const*, bool> error_concat(char const* prefix, char const* error
     return {new_str, true};
 }
 
+Instruction::Instruction(InstructionKind kind) : kind(kind) {}
+Instruction::Instruction(InstructionKind kind, Object *value) : kind(kind), value(value) {}
+
+void Instruction::write(FILE *file, Error **error) {
+    size_t write = fwrite(&kind, sizeof kind, 1, file);
+    if (write != 1) {
+        goto write_error;
+    }
+
+    if (value != nullptr) {
+        value->write(file, error);
+        if (error != nullptr) {
+            return;
+        }
+    }
+
+    return;
+
+write_error:
+    if (feof(file)) {
+        *error = new Error(ErrorKind::UnexpectedEOF, "EOF was encountered while reading a instruction");
+        return;
+    } else {
+        *error = new Error(ErrorKind::FileError, error_concat("failed to read file: ", strerror(errno)));
+        return;
+    }
+}
+
+
+void Object::write(FILE *file, Error **error) {
+    size_t write = fwrite(&kind, sizeof kind, 1, file);
+    if (write != 1) {
+        goto write_error;
+    }
+
+    if (std::holds_alternative<u64>(data)) {
+        auto data = std::get<u64>(this->data);
+        write = fwrite(&data, sizeof data, 1, file);
+        if (write != 1) {
+            goto write_error;
+        }
+    }
+
+    return;
+
+write_error:
+    if (feof(file)) {
+        *error = new Error(ErrorKind::UnexpectedEOF, "EOF was encountered while reading a instruction");
+        return;
+    } else {
+        *error = new Error(ErrorKind::FileError, error_concat("failed to read file: ", strerror(errno)));
+        return;
+    }
+}
 
 std::vector<Instruction> bytecode_from_file(std::string_view filename, Error **error) {
     FILE* file = fopen(filename.data(), "r");
@@ -134,12 +190,19 @@ error:
 }
 
 Error::Error(ErrorKind kind, char const *error_value, bool cleanup_error_value) : kind(kind), error_value(error_value), cleanup_error_value(cleanup_error_value) {}
-Error::Error(ErrorKind kind, std::tuple<char const*, bool> error_value) : kind(kind), error_value(std::get<char const*>(error_value)), cleanup_error_value(std::get<bool>(error_value)) {}
+Error::Error(ErrorKind kind, std::tuple<char const*, bool> error_value) :
+    kind(kind),
+    error_value(std::get<char const*>(error_value)),
+    cleanup_error_value(std::get<bool>(error_value)) {}
 
 Error::~Error() {
     if (cleanup_error_value) {
         free(const_cast<char*>(error_value));
     }
+}
+
+char const* Error::what() {
+    return error_value;
 }
 };
 

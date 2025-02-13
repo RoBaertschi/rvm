@@ -34,8 +34,15 @@ enum class InstructionKind: u8 {
 static_assert(InstructionKind::Last <= static_cast<InstructionKind>((1 << 7)), "The last bit is reserved for multi byte instructions");
 
 struct Instruction {
-    InstructionKind type;
+    InstructionKind kind;
     Object         *value;
+
+    Instruction(InstructionKind kind);
+    Instruction(InstructionKind kind, Object *value);
+
+    // Does not check if this is a valid instruction
+    // FIXME(robin): Add validation of instruction, optionally or required
+    void write(FILE *file, Error **error);
 };
 
 enum class ObjectKind: u8 {
@@ -47,8 +54,12 @@ enum class ObjectKind: u8 {
 
 class Object {
 public:
-    ObjectKind        type;
+    ObjectKind        kind;
     std::variant<u64> data;
+
+    // Does not check if this is a valid instruction
+    // FIXME(robin): Add validation of instruction, optionally or required
+    void write(FILE *file, Error **error);
 };
 
 std::vector<Instruction> bytecode_from_file(std::string_view filename, Error **error);
