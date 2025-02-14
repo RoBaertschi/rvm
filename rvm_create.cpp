@@ -11,6 +11,7 @@
 #include "ftxui/component/component_base.hpp"
 #include "ftxui/component/screen_interactive.hpp"
 #include "ftxui/dom/elements.hpp"
+#include "ftxui/dom/node.hpp"
 using namespace ftxui;
 
 Component Either(Component when_true, Component when_false, std::function<bool()> show) {
@@ -49,84 +50,108 @@ Component Wrap(std::string name, Component component) {
     );
 }
 
-int main() {
-    int selected_instruction = 0;
-    int selected_object = 0;
-
-    std::vector<std::string> instructions = {
+struct ConsoleUI {
+    std::vector<std::string> instruction_kinds = {
         #define _X(kind, ...) #kind,
         INSTRUCTION_KIND
         #undef _X
     };
-
-    std::vector<std::string> object = {
+    std::vector<std::string> object_kinds = {
         #define _X(kind, ...) #kind,
         OBJECT_KIND
         #undef _X
     };
 
+    int selected_instruction = 0;
+    int selected_object = 0;
+    int radio_inst_split = 30;
+    int radio_obj_split = 60;
+
     std::string object_input = "0";
     rvm::u64 object_input_value = 0;
 
-    auto instructions_radio = Radiobox(&instructions, &selected_instruction);
-    auto instructions_radio_renderer = Renderer(instructions_radio, [&] {
-        return vbox({
-            text("Instruction"),
-            separator(),
-            instructions_radio->Render(),
-        });
-    });
-    auto object_radio = Radiobox(&object, &selected_object);
-    auto object_input_field = Wrap("Input", Input(&object_input) | border);
     bool is_object_input_invalid = false;
-    auto object_creation = Container::Horizontal({ object_radio, object_input_field });
-    auto object_input_invalid = Renderer([&]{ return text("Only Numbers are valid!") | color(Color::Palette16::Red); }) | Maybe(&is_object_input_invalid);
-    auto object_creation_renderer = Renderer(object_creation, [&] {
-        rvm::u64 value = 0;
-        auto result = std::from_chars(object_input.data(), object_input.data() + object_input.length(), value);
-        is_object_input_invalid = result.ec != std::errc{};
-        if (!is_object_input_invalid) {
-            object_input_value = value;
-        }
-        return vbox({
-            text("Object Kind"),
-            separator(),
-            hbox({
-                object_radio->Render(),
-                emptyElement() | size(WIDTH, EQUAL, 4),
-                vbox({
-                    object_input_field->Render(),
-                    object_input_invalid->Render() | size(HEIGHT, GREATER_THAN, 1),
-                    text(std::format("Result: {}", object_input_value))
-                }) | flex
-            })
-        });
-    });
-    auto object_create = Either(
-        object_creation_renderer,
-        Renderer([] { return text("Select a instruction kind with a object argument."); }),
-        [&] {
-            return static_cast<rvm::InstructionKind>(selected_instruction) == rvm::InstructionKind::Push;
-        }
-    );
-    auto preview = Renderer([&] {
-        return paragraph(
-            std::format("{}{}",
-                        instructions[selected_instruction],
-                        static_cast<rvm::InstructionKind>(selected_instruction) == rvm::InstructionKind::Push
-                        ? std::format(" {} {}", object[selected_object], object_input_value)
-                        : ""
-            )
-        ) | center;
-    });
-    int radio_inst_split = 30;
-    int radio_obj_split = 60;
-    auto add_instruction = ResizableSplitLeft(
-      instructions_radio_renderer,
-      ResizableSplitLeft(object_create, preview, &radio_obj_split),
-      &radio_inst_split);
 
-    auto screen = ScreenInteractive::TerminalOutput();
-    screen.Loop(add_instruction | border);
-    return 0;
+    std::vector<rvm::Instruction> instructions{};
+
+    Component create_instruction() {
+        Component instructions_radio = Radiobox(&instruction_kinds, &selected_instruction);
+        Component add_instruction = Button("Add", [=, this]{
+            std::cout << &instruction_kinds << selected_instruction;
+        });
+        Component ins = Container::Vertical({instructions_radio, add_instruction});
+        Component instructions_radio_renderer = Renderer(ins, [=] {
+            return vbox({
+                text("Instruction"),
+                separator(),
+                instructions_radio->Render(),
+                add_instruction->Render(),
+            });
+        });
+
+        Component object_radio = Radiobox(&object_kinds, &selected_object);
+        Component object_input_field = Wrap("Input", Input(&object_input) | border);
+        Component object_creation = Container::Horizontal({ object_radio, object_input_field });
+        Component object_input_invalid = Renderer([=, this]{ return text("Only Numbers are valid!") | color(Color::Palette16::Red); }) | Maybe(&is_object_input_invalid);
+        Component object_creation_renderer = Renderer(
+            object_creation,
+            [=, this] {
+            rvm::u64 value = 0;
+            auto result = std::from_chars(object_input.data(), object_input.data() + object_input.length(), value);
+            is_object_input_invalid = result.ec != std::errc{};
+            if (!is_object_input_invalid) {
+                object_input_value = value;
+            }
+            return vbox({
+                text("Object Kind"),
+                separator(),
+                hbox({
+                    object_radio->Render(),
+                    emptyElement() | size(WIDTH, EQUAL, 4),
+                    vbox({
+                        object_input_field->Render(),
+                        object_input_invalid->Render() | size(HEIGHT, GREATER_THAN, 1),
+                        text(std::format("Result: {}", object_input_value))
+                    }) | flex
+                })
+            });
+        });
+        Component object_create = Either(
+            object_creation_renderer,
+            Renderer([] { return text("Select a instruction kind with a object argument."); }),
+            [=, this] {
+                return static_cast<rvm::InstructionKind>(selected_instruction) == rvm::InstructionKind::Push;
+            }
+        );
+        Component preview = Renderer([=, this] {
+            return paragraph(
+                std::format("{}{}",
+                            instruction_kinds[selected_instruction],
+                            static_cast<rvm::InstructionKind>(selected_instruction) == rvm::InstructionKind::Push
+                            ? std::format(" {} {}", object_kinds[selected_object], object_input_value)
+                            : ""
+                )
+            ) | center;
+        });
+        Component create_instruction = ResizableSplitLeft(
+            instructions_radio_renderer,
+            ResizableSplitLeft(object_create, preview, &radio_obj_split),
+            &radio_inst_split
+        );
+
+
+        return create_instruction;
+    }
+
+    int Run() {
+        auto screen = ScreenInteractive::TerminalOutput();
+        auto component = create_instruction();
+        screen.Loop(component | border);
+        return 0;
+    }
+};
+
+int main() {
+    auto ui = ConsoleUI();
+    return ui.Run();
 }
