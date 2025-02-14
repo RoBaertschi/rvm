@@ -1,2 +1,5 @@
 .cache
+result
 builddir
+subprojects/*
+!subprojects/*.wrap
