@@ -57,9 +57,15 @@ struct Instruction {
     std::string string();
 };
 
+#define OBJECT_KIND \
+    _X(U64, u64)    \
+    _X(Pointer, u64)
+
+
 enum class ObjectKind: u8 {
-    U64,
-    Pointer,
+#define _X(kind, ...) kind,
+    OBJECT_KIND
+#undef _X
 
     Last,
 };
