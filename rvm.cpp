@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <iostream>
 #include <tuple>
 #include <variant>
 #include <vector>
@@ -11,6 +12,15 @@
 
 namespace rvm {
 
+char const* instruction_kind_string(const InstructionKind& kind) {
+    switch(kind) {
+#define _X(kind, args) case InstructionKind::kind: return #kind;
+    INSTRUCTION_KIND
+#undef _X
+        default:
+            return "INVALID INSTRUCTION KIND";
+    }
+}
 
 Object *object_from_file(FILE *file, Error **error);
 
@@ -27,7 +37,11 @@ std::tuple<char const*, bool> error_concat(char const* prefix, char const* error
     return {new_str, true};
 }
 
-Instruction::Instruction(InstructionKind kind) : kind(kind) {}
+std::string Instruction::string() {
+    return std::format("{} {}", instruction_kind_string(kind), value != nullptr ? value->string() : "<no args>");
+}
+
+Instruction::Instruction(InstructionKind kind) : kind(kind), value(nullptr) {}
 Instruction::Instruction(InstructionKind kind, Object *value) : kind(kind), value(value) {}
 
 void Instruction::write(FILE *file, Error **error) {
@@ -38,7 +52,7 @@ void Instruction::write(FILE *file, Error **error) {
 
     if (value != nullptr) {
         value->write(file, error);
-        if (error != nullptr) {
+        if (*error != nullptr) {
             return;
         }
     }
@@ -55,6 +69,31 @@ write_error:
     }
 }
 
+bool Instruction::operator==(const Instruction& other) const {
+    return same(other);
+};
+
+bool Instruction::same(const Instruction& other) const {
+    if (this == &other) return true;
+
+    if (this->kind != other.kind) return false;
+    if (this->value == nullptr) {
+        return other.value == nullptr;
+    }
+
+    return this->value->same(*other.value);
+}
+
+std::string Object::string() {
+    switch (kind) {
+    case ObjectKind::U64:
+        return std::format("U64 {}", std::get<u64>(data));
+    case ObjectKind::Pointer:
+        return std::format("Pointer {}", std::get<u64>(data));
+    default:
+        return "INVALID OBJECT KIND";
+    }
+}
 
 void Object::write(FILE *file, Error **error) {
     size_t write = fwrite(&kind, sizeof kind, 1, file);
@@ -82,6 +121,18 @@ write_error:
     }
 }
 
+bool Object::operator==(const Object& other) const {
+    return same(other);
+}
+
+bool Object::same(const Object& other) const {
+    if (this == &other) return true;
+    if (this->kind != other.kind) return false;
+    if (this->data != other.data) return false;
+
+    return true;
+}
+
 std::vector<Instruction> bytecode_from_file(std::string_view filename, Error **error) {
     FILE* file = fopen(filename.data(), "r");
     if (file == nullptr) {
@@ -95,10 +146,11 @@ std::vector<Instruction> bytecode_from_file(std::string_view filename, Error **e
 std::vector<Instruction> bytecode_from_file(FILE *file, Error **error) {
     std::vector<Instruction> instructions = {};
 
-    while(!feof(file) || !ferror(file)) {
+    while(!feof(file) && !ferror(file)) {
         u8 read_instruction = 0;
         size_t read = fread(&read_instruction, sizeof read_instruction, 1, file);
         if (read != 1) {
+            if (feof(file)) break;
             goto error;
         }
 
@@ -110,20 +162,22 @@ std::vector<Instruction> bytecode_from_file(FILE *file, Error **error) {
         InstructionKind instruction = static_cast<InstructionKind>(read_instruction);
 
         switch (instruction) {
-        case InstructionKind::Push: {
+            case InstructionKind::Push: {
                 // Read object
                 auto obj = object_from_file(file, error);
-                if (error != nullptr) {
+                if (*error != nullptr) {
                     return instructions;
                 }
                 instructions.push_back(Instruction(instruction, obj));
+                break;
             }
-        case InstructionKind::Nop:
-        case InstructionKind::Add:
-        case InstructionKind::Sub:
-            instructions.push_back(Instruction(instruction));
-        case InstructionKind::Last:
-            break;
+            case InstructionKind::Nop:
+            case InstructionKind::Add:
+            case InstructionKind::Sub:
+                instructions.push_back(Instruction(instruction));
+                break;
+            case InstructionKind::Last:
+                break;
         }
     }
 
@@ -166,7 +220,7 @@ Object *object_from_file(FILE *file, Error **error) {
         case ObjectKind::U64: {
             u64 obj_u64;
             read = fread(&obj_u64, sizeof(obj_u64), 1, file);
-            if (read != sizeof(obj_u64)) {
+            if (read != 1) {
                 goto error;
             }
             object = new Object(object_kind, obj_u64);
@@ -181,7 +235,7 @@ Object *object_from_file(FILE *file, Error **error) {
 
 error:
     if (feof(file)) {
-        *error = new Error(ErrorKind::UnexpectedEOF, "EOF was encountered while reading a instruction");
+        *error = new Error(ErrorKind::UnexpectedEOF, "EOF was encountered while reading a object");
         return {};
     } else {
         *error = new Error(ErrorKind::FileError, error_concat("failed to read file: ", strerror(errno)));

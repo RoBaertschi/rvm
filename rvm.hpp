@@ -20,21 +20,28 @@ class VM;
 using Stack = std::stack<Object>;
 using Heap = std::vector<Object>;
 
-enum class InstructionKind: u8 {
-    Nop,  // No operation, do nothing
-    Push, // Push the following object onto the stack
+#define INSTRUCTION_KIND                                        \
+    _X(Nop,  0) /* No operation, do nothing */                  \
+    _X(Push, 1) /* Push the following object onto the stack */  \
+    /* Pops 2 values from the stack and returns the result */   \
+    _X(Add, 0)                                                  \
+    _X(Sub, 0)
 
-    // Pops 2 values from the stack and returns the result
-    Add,
-    Sub,
+enum class InstructionKind: u8 {
+#define _X(kind, ...) kind,
+    INSTRUCTION_KIND
+#undef _X
 
     Last,
 };
+
+char const* instruction_string(const InstructionKind& kind);
 
 static_assert(InstructionKind::Last <= static_cast<InstructionKind>((1 << 7)), "The last bit is reserved for multi byte instructions");
 
 struct Instruction {
     InstructionKind kind;
+    // NOTE: Nullable
     Object         *value;
 
     Instruction(InstructionKind kind);
@@ -43,6 +50,11 @@ struct Instruction {
     // Does not check if this is a valid instruction
     // FIXME(robin): Add validation of instruction, optionally or required
     void write(FILE *file, Error **error);
+
+    bool same(const Instruction& other) const;
+    bool operator==(const Instruction& other) const;
+
+    std::string string();
 };
 
 enum class ObjectKind: u8 {
@@ -60,6 +72,11 @@ public:
     // Does not check if this is a valid instruction
     // FIXME(robin): Add validation of instruction, optionally or required
     void write(FILE *file, Error **error);
+
+    bool same(const Object& other) const;
+    bool operator==(const Object& other) const;
+
+    std::string string();
 };
 
 std::vector<Instruction> bytecode_from_file(std::string_view filename, Error **error);
@@ -92,4 +109,26 @@ public:
     char const *what();
     ~Error();
 };
+
+// NOTE: Internal stuff, not public API and not stable
+
+#define STRING_JOIN2(arg1, arg2) DO_STRING_JOIN2(arg1, arg2)
+#define DO_STRING_JOIN2(arg1, arg2) arg1 ## arg2
+#define defer(...) \
+    auto STRING_JOIN2(_defer_, __LINE__) = rvm::internal::make_defer([=](){__VA_ARGS__;})
+
+namespace internal {
+template <class F>
+struct Defer {
+    F f;
+    Defer(F f) : f(f) {}
+    ~Defer() { f(); }
+};
+
+template <class F>
+Defer<F> make_defer(F f) {
+    return Defer(f);
+}
+
+}
 }

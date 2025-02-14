@@ -1,12 +1,15 @@
 #include "rvm.hpp"
 #include <cerrno>
+#include <csetjmp>
+#include <csignal>
 #include <cstdio>
 #include <cstring>
+#include <exception>
 #include <functional>
 #include <iostream>
+#include <ostream>
 #include <string>
 #include <string_view>
-#include <utility>
 #include <vector>
 #include <format>
 
@@ -37,8 +40,19 @@ struct Context {
         current_test = test_name;
     }
 
-    void fail(std::string error) {
+    void fail(std::string_view error) {
         std::cerr << RED_FG "FAIL " << current_test << ": " << error << "\n" RESET;
+    }
+
+    // Frees the error if it is not nullptr and also fails with some prefix
+    int handle_error(rvm::Error *error, std::string_view prefix = "") {
+        if (error != nullptr) {
+            fail(std::format("{}{}", prefix, error->what()));
+            delete error;
+            return 1;
+        }
+
+        return 0;
     }
 
     int end(int result) {
@@ -51,6 +65,18 @@ struct Context {
     }
 };
 
+#define HANDLE_ERROR(error, prefix) do {            \
+    int result = ctx->handle_error(error, prefix);  \
+    if (result != 0) {                              \
+        return ctx->end(result);                    \
+    }                                               \
+} while(0)
+
+#define ASSERT(expr) if (!(expr)) {\
+    ctx->fail(std::format("assertion failed: ({})", #expr));\
+    return ctx->end(1);\
+}
+
 int parse_bytecode_correctly(Context *ctx) {
     ctx->begin("parse_bytecode_correctly");
 
@@ -62,32 +88,53 @@ int parse_bytecode_correctly(Context *ctx) {
     };
 
     FILE *file = tmpfile();
+    defer(fclose(file));
 
+    rvm::Error *error = nullptr;
     for (auto instruction : instructions) {
-        rvm::Error *error;
         instruction.write(file, &error);
-        if (error != nullptr) {
-            ctx->fail(std::format("Failed to write instruction: {}", error->what()));
-            return ctx->end(1);
-        }
+        HANDLE_ERROR(error, "Failed to write instruction: ");
     }
 
-    fclose(file);
+    fseek(file, 0, SEEK_SET);
+
+    auto bytecode = rvm::bytecode_from_file(file, &error);
+    HANDLE_ERROR(error, "error while parsing bytecode: ");
+
+    ASSERT(bytecode == instructions);
 
     return ctx->end(0);
 }
 
+std::jmp_buf signal_jmp_buf;
+
+volatile std::sig_atomic_t signal_status = 0;
+
+extern "C" void signal_handler(int sig) {
+    signal_status = sig;
+    longjmp(signal_jmp_buf, sig);
+}
+
 int main() {
+    Context ctx{};
+    if (setjmp(signal_jmp_buf) != 0) {
+        std::cerr << RED_FG "Encountered signal " << signal_status << " while running test " << ctx.current_test << RESET << std::endl;
+        return -1;
+    }
+    signal(SIGSEGV, signal_handler);
+
     std::vector<std::function<int(Context*)>> tests{
         parse_bytecode_correctly
     };
 
-    Context ctx{};
-
     for(auto test : tests) {
-        int result = test(&ctx);
-        if (result != 0) {
-            return result;
+        try {
+            int result = test(&ctx);
+            if (result != 0) {
+                return result;
+            }
+        } catch(std::exception e) {
+            ctx.fail(std::format("exception thrown while running test {}: {}", ctx.current_test, e.what()));
         }
     }
 }
