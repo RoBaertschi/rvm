@@ -1,5 +1,10 @@
+#include <cerrno>
 #include <charconv>
+#include <cstdio>
+#include <cstring>
+#include <format>
 #include <functional>
+#include <iostream>
 #include <ostream>
 #include <rvm.hpp>
 #include <string>
@@ -77,7 +82,19 @@ struct ConsoleUI {
     Component create_instruction() {
         Component instructions_radio = Radiobox(&instruction_kinds, &selected_instruction);
         Component add_instruction = Button("Add", [=, this]{
-            std::cout << &instruction_kinds << selected_instruction;
+            rvm::InstructionKind kind = static_cast<rvm::InstructionKind>(selected_instruction);
+
+            if (kind != rvm::InstructionKind::Push) {
+                instructions.push_back(
+                    kind
+                );
+            } else {
+                instructions.push_back(
+                    rvm::Instruction{kind, new rvm::Object(static_cast<rvm::ObjectKind>(selected_object), object_input_value)}
+                );
+            }
+
+            rebuild_instruction_list();
         });
         Component ins = Container::Vertical({instructions_radio, add_instruction});
         Component instructions_radio_renderer = Renderer(ins, [=] {
@@ -92,7 +109,7 @@ struct ConsoleUI {
         Component object_radio = Radiobox(&object_kinds, &selected_object);
         Component object_input_field = Wrap("Input", Input(&object_input) | border);
         Component object_creation = Container::Horizontal({ object_radio, object_input_field });
-        Component object_input_invalid = Renderer([=, this]{ return text("Only Numbers are valid!") | color(Color::Palette16::Red); }) | Maybe(&is_object_input_invalid);
+        Component object_input_invalid = Renderer([]{ return text("Only Numbers are valid!") | color(Color::Palette16::Red); }) | Maybe(&is_object_input_invalid);
         Component object_creation_renderer = Renderer(
             object_creation,
             [=, this] {
@@ -143,15 +160,135 @@ struct ConsoleUI {
         return create_instruction;
     }
 
+    int selected = 0;
+    std::vector<std::string> instruction_menu_entries{};
+
+    int instruction_list_split = 30;
+
+    void rebuild_instruction_list() {
+        instruction_menu_entries.clear();
+        for (rvm::u64 i = 0; i < instructions.size(); i++) {
+            instruction_menu_entries.push_back(
+                std::format("{} {}", i, instructions[i].string())
+            );
+        }
+    }
+
+    Component create_instruction_list() {
+        rebuild_instruction_list();
+        auto radiobox = Radiobox(&instruction_menu_entries, &selected, RadioboxOption::Simple());
+
+        // Edit selected entry
+        auto remove = Button("Remove", [this] {
+            if (selected < 0 || static_cast<size_t>(selected) >= instructions.size()) {return;}
+
+            instructions.erase(instructions.begin() + selected);
+            rebuild_instruction_list();
+        });
+
+        // Menu
+        auto container = Renderer(Container::Horizontal({radiobox, remove}), [=]{
+
+            return hbox({
+                radiobox->Render() | flex,
+                separator(),
+                vbox({ text("Edit"), remove->Render() | size(WIDTH, GREATER_THAN, 20) })
+            });
+        });
+
+        return container;
+    }
+
+    std::string save_to_file{};
+    std::string error_display{};
+    Component create_save_to_file() {
+        Component input = Input(&save_to_file);
+        Component save_button = Button("Save", [this]{
+            FILE *file = fopen(save_to_file.c_str(), "w+b");
+            if (file == NULL) {
+                error_display = std::format("Error while opening file: {}", strerror(errno));
+                return;
+            }
+            defer(fclose(file));
+
+            rvm::Error *error = nullptr;
+
+            for (auto instruction : instructions) {
+                instruction.write(file, &error);
+
+                if (error != nullptr) {
+                    error_display = std::format("Error while writing instruction: {}", error->what());
+                    delete error;
+                    error = nullptr;
+                    return;
+                }
+            }
+
+            defer(if (error != nullptr) delete error;);
+        });
+
+        return Renderer(
+            Container::Horizontal({ input, save_button }),
+            [=, this] {
+                return hbox({input->Render() | size(WIDTH, GREATER_THAN, 30) | border, save_button->Render() | center, text(error_display) | color(Color::Red)});
+            }
+        );
+    }
+
+    bool show_quit_modal = false;
+    Component quit_modal_component(ScreenInteractive *screen) {
+        auto confirm_button = Button("Confirm", [screen] {
+            screen->ExitLoopClosure()();
+        });
+        auto cancel_button = Button("Cancel", [this] {
+            this->show_quit_modal = false;
+        });
+
+        return Renderer(Container::Horizontal({confirm_button, cancel_button}), [=] {
+            return vbox({text("Are you sure? Did you save?") | center, hbox({confirm_button->Render() | flex_grow, cancel_button->Render() | flex_grow})}) | border;
+        });
+    }
+
     int Run() {
         auto screen = ScreenInteractive::TerminalOutput();
         auto component = create_instruction();
-        screen.Loop(component | border);
+        auto instruction_list = create_instruction_list();
+        auto save_to_file = create_save_to_file();
+        auto renderer = Renderer(
+            Container::Vertical({component, instruction_list, save_to_file }), [&] {
+            return vbox({component->Render() | border, instruction_list->Render() | size(HEIGHT, GREATER_THAN, 1) | border, save_to_file->Render()});
+        }) | Modal(quit_modal_component(&screen), &show_quit_modal);
+
+        auto event_handler = CatchEvent(renderer, [&](Event event) {
+            if (event == Event::Character('q')) {
+                show_quit_modal = true;
+                return true;
+            }
+            return false;
+        });
+
+        screen.Loop(event_handler);
         return 0;
     }
 };
 
-int main() {
+int main(int argc, char **argv) {
+    std::vector<char*> args{argv, argv+argc};
+
     auto ui = ConsoleUI();
+
+    if (argc > 1) {
+        rvm::Error *error = nullptr;
+        auto bytecode = rvm::bytecode_from_file(args[1], &error);
+        if (error != nullptr) {
+            std::cerr << "Error while parsing bytecode in file " << args[1] << " error: " << error->what() << std::endl;
+            delete error;
+            return 1;
+        }
+
+        ui.instructions = std::move(bytecode);
+        ui.save_to_file = args[1];
+    }
+
     return ui.Run();
 }
