@@ -1,3 +1,3 @@
 - [ ] Get some bitches
-- [ ] Repl
+- [x] Repl
 - [ ] Error objects
