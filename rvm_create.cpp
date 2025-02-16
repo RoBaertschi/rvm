@@ -279,6 +279,7 @@ int main(int argc, char **argv) {
 
     if (argc > 1) {
         rvm::Error *error = nullptr;
+        defer(if (error != nullptr) { delete error; });
         auto bytecode = rvm::bytecode_from_file(args[1], &error);
         if (error != nullptr) {
             std::cerr << "Error while parsing bytecode in file " << args[1] << " error: " << error->what() << std::endl;

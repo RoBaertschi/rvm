@@ -24,6 +24,11 @@
           meson
           ninja
           clang
+
+          pkg-config
+        ];
+        buildInputs = with pkgs; [
+          ftxui
         ];
 
         enableParallelBuilding = true;
@@ -53,6 +58,8 @@
             meson
             ninja
             clang
+            pkg-config
+            ftxui
           ];
           shellHook = ''
             PATH="${pkgs.clang-tools}/bin:$PATH"

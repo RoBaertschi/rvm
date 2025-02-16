@@ -4,7 +4,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <iostream>
+#include <stdexcept>
 #include <tuple>
+#include <type_traits>
 #include <variant>
 #include <vector>
 #include <format>
@@ -38,6 +41,29 @@ std::tuple<char const*, bool> error_concat(char const* prefix, char const* error
 
 std::string Instruction::string() {
     return std::format("{} {}", instruction_kind_string(kind), value != nullptr ? value->string() : "<no args>");
+}
+
+void Instruction::check(Error **error) {
+    switch(kind) {
+        case InstructionKind::Push: {
+            if (value == nullptr) {
+                *error = new Error(ErrorKind::InvalidInstruction, "Push requires an object as an argument, but found none");
+                return;
+            }
+            value->check(error);
+            return;
+        }
+        case InstructionKind::Nop:
+        case InstructionKind::Add:
+        case InstructionKind::Sub: {
+            if (value != nullptr) {
+                *error = new Error(ErrorKind::InvalidInstruction, strdup(std::format("{} does not allow an object argument", instruction_kind_string(kind)).c_str()), true);
+            }
+            return;
+        }
+        default:
+            *error = new Error(ErrorKind::InvalidInstruction, strdup(std::format("invalid instruction kind {}", static_cast<std::underlying_type_t<InstructionKind>>(kind)).c_str()), true);
+    }
 }
 
 Instruction::Instruction(InstructionKind kind) : kind(kind), value(nullptr) {}
@@ -130,6 +156,47 @@ bool Object::same(const Object& other) const {
     if (this->data != other.data) return false;
 
     return true;
+}
+
+void Object::check(Error **error) {
+
+    switch (kind) {
+        case ObjectKind::U64:
+        case ObjectKind::Pointer: {
+            if (!std::holds_alternative<u64>(data)) {
+                *error = new Error(ErrorKind::InvalidObject, strdup(
+                    std::format("invalid object data, expected u64, got {}",
+                                // NOTE: Extract to function if used twice
+                                // https://stackoverflow.com/questions/53696720/get-currently-held-typeid-of-stdvariant-like-boostvariant-type
+                                std::visit([](auto&& x)->decltype(auto){return typeid(x);}, data).name()
+                                )
+                    .c_str()
+                ), true);
+                return;
+            }
+            break;
+        }
+        default:
+        case ObjectKind::Last: {
+            *error = new Error(ErrorKind::InvalidObject, strdup(std::format("invalid object kind {}", static_cast<std::underlying_type_t<ObjectKind>>(kind)).c_str()), true);
+            return;
+        }
+    }
+}
+
+Object Object::apply_operator(Operator op, Object rhs, Error **error) {
+    if (kind != rhs.kind) {
+        *error = new Error(ErrorKind::InvalidOperator, "object are not of same type");
+    }
+
+    u64 lhs_data = std::get<u64>(data);
+    u64 rhs_data = std::get<u64>(rhs.data);
+
+    if (op == Operator::Sub) {
+        return Object(kind, lhs_data - rhs_data);
+    } else {
+        return Object(kind, lhs_data + rhs_data);
+    }
 }
 
 std::vector<Instruction> bytecode_from_file(std::string_view filename, Error **error) {
@@ -242,6 +309,13 @@ error:
     }
 }
 
+// ______
+//|  ____|
+//| |__   _ __ _ __ ___  _ __
+//|  __| | '__| '__/ _ \| '__|
+//| |____| |  | | | (_) | |
+//|______|_|  |_|  \___/|_|
+
 Error::Error(ErrorKind kind, char const *error_value, bool cleanup_error_value) : kind(kind), error_value(error_value), cleanup_error_value(cleanup_error_value) {}
 Error::Error(ErrorKind kind, std::tuple<char const*, bool> error_value) :
     kind(kind),
@@ -257,5 +331,66 @@ Error::~Error() {
 char const* Error::what() {
     return error_value;
 }
+
+
+// __      ____  __ 
+// \ \    / /  \/  |
+//  \ \  / /| \  / |
+//   \ \/ / | |\/| |
+//    \  /  | |  | |
+//     \/   |_|  |_|
+
+VM::VM(std::vector<Instruction> bytecode) : pc(0), stack({}), heap({}), bytecode(bytecode) {}
+
+void VM::tick(Error **error) {
+    pc += 1;
+
+    Instruction instruction{InstructionKind::Last};
+
+    try {
+        instruction = bytecode.at(pc);
+    } catch(std::out_of_range e) {
+        *error = new Error(ErrorKind::NoMoreInstructions, strdup(std::format("no more instructions. pc={}", pc).c_str()), true);
+        return;
+    }
+    instruction.check(error);
+    if (error != nullptr) {
+        return;
+    }
+
+    switch (instruction.kind) {
+        case InstructionKind::Push: {
+            stack.push(*instruction.value);
+            break;
+        }
+
+        case InstructionKind::Nop:
+            break;
+        case InstructionKind::Add: {
+            auto rhs = stack.pop();
+            auto lhs = stack.pop();
+
+            auto result = lhs.apply_operator(Operator::Add, rhs, error);
+            if (error != nullptr) {
+                return;
+            }
+            stack.push(result);
+        }
+        case InstructionKind::Sub: {
+            auto rhs = stack.pop();
+            auto lhs = stack.pop();
+
+            auto result = lhs.apply_operator(Operator::Sub, rhs, error);
+            if (error != nullptr) {
+                return;
+            }
+            stack.push(result);
+        }
+        case InstructionKind::Last:
+        default:
+            abort();
+    }
+}
+
 };
 

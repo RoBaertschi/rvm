@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <cstdio>
-#include <stack>
 #include <string_view>
 #include <tuple>
 #include <variant>
@@ -17,7 +16,26 @@ using u64 = uint64_t;
 class Error;
 class Object;
 class VM;
-using Stack = std::stack<Object>;
+
+namespace internal {
+template <class T>
+struct Stack {
+    // Internal collection
+    std::vector<T> c;
+
+    void push(T value) {
+        c.push_back(value);
+    }
+
+    T pop() {
+        T value = c[c.size() - 1];
+        c.pop_back();
+        return value;
+    }
+};
+};
+
+using Stack = internal::Stack<Object>;
 using Heap = std::vector<Object>;
 
 #define INSTRUCTION_KIND                                        \
@@ -55,6 +73,13 @@ struct Instruction {
     bool operator==(const Instruction& other) const;
 
     std::string string();
+    // Checks if the instruction is valid
+    void check(Error **error);
+};
+
+enum class Operator {
+    Add,
+    Sub,
 };
 
 #define OBJECT_KIND \
@@ -83,6 +108,10 @@ public:
     bool operator==(const Object& other) const;
 
     std::string string();
+    // Checks if the object is valid
+    void check(Error **error);
+
+    Object apply_operator(Operator op, Object rhs, Error **error);
 };
 
 std::vector<Instruction> bytecode_from_file(std::string_view filename, Error **error);
@@ -90,19 +119,30 @@ std::vector<Instruction> bytecode_from_file(FILE *file, Error **error);
 
 class VM {
 public:
-    u64                      pc;
-    Stack                    stack;
-    Heap                     heap;
+    u64                      pc = 0;
+    Stack                    stack{};
+    Heap                     heap{};
     std::vector<Instruction> bytecode;
+
+    VM(std::vector<Instruction> bytecode);
+
+    // Tick advances the program counter and executes the corresponding instruction
+    void         tick(Error **error);
 };
 
 enum class ErrorKind {
+    // Bytecode Parsing Errors
     InvalidObject,
     InvalidInstruction,
 
+    // File Errors
     FileNotFound,
     FileError,
-    UnexpectedEOF
+    UnexpectedEOF,
+
+    // VM Execution Errors
+    NoMoreInstructions,
+    InvalidOperator,
 };
 
 class Error {
