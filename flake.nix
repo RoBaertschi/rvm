@@ -8,7 +8,7 @@
     self,
     nixpkgs,
   }: let
-    supportedSystems = ["x86_64-linux"];
+    supportedSystems = ["x86_64-linux" "aarch64-darwin"];
     forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
     nixpkgsFor = forAllSystems (system: import nixpkgs {inherit system;});
   in {
@@ -23,7 +23,12 @@
         nativeBuildInputs = with pkgs; [
           meson
           ninja
-          gcc
+          clang
+
+          pkg-config
+        ];
+        buildInputs = with pkgs; [
+          ftxui
         ];
 
         enableParallelBuilding = true;
@@ -38,13 +43,28 @@
     devShells = forAllSystems (system: let
       pkgs = nixpkgsFor.${system};
     in {
-      default = pkgs.mkShell {
-        buildInputs = with pkgs; [
-          meson
-          ninja
-          gcc
-        ];
-      };
+      default = with pkgs; let
+        llvm = llvmPackages_latest;
+      in
+        pkgs.mkShell.override {
+          stdenv = clangStdenv;
+        } {
+          buildInputs = with pkgs; [
+            llvm.libcxx
+            llvm.libllvm
+            gdb
+
+            clang-tools
+            meson
+            ninja
+            clang
+            pkg-config
+            ftxui
+          ];
+          shellHook = ''
+            PATH="${pkgs.clang-tools}/bin:$PATH"
+          '';
+        };
     });
   };
 }
