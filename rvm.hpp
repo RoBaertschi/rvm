@@ -165,6 +165,7 @@ enum class ErrorKind {
 
 class Error {
 public:
+    Error(ErrorKind kind);
     Error(ErrorKind kind, char const *error_value = "", bool cleanup_error_value = false);
     Error(ErrorKind kind, std::tuple<char const*, bool> error_value = {"", false});
     ErrorKind kind;

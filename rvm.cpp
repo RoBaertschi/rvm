@@ -316,6 +316,7 @@ error:
 //| |____| |  | | | (_) | |
 //|______|_|  |_|  \___/|_|
 
+Error::Error(ErrorKind kind) { Error(kind, "", false); }
 Error::Error(ErrorKind kind, char const *error_value, bool cleanup_error_value) : kind(kind), error_value(error_value), cleanup_error_value(cleanup_error_value) {}
 Error::Error(ErrorKind kind, std::tuple<char const*, bool> error_value) :
     kind(kind),
