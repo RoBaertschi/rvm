@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <iostream>
 #include <string_view>
 #include <tuple>
 #include <variant>
@@ -23,6 +24,14 @@ struct Stack {
     // Internal collection
     std::vector<T> c;
 
+    size_t size() const {
+        return c.size();
+    }
+
+    T& operator[](size_t index) {
+        return c[index];
+    }
+
     void push(T value) {
         c.push_back(value);
     }
@@ -31,6 +40,15 @@ struct Stack {
         T value = c[c.size() - 1];
         c.pop_back();
         return value;
+    }
+
+    // Returns nullptr if the stack has no top value
+    T* top() {
+        if (c.size() > 0) {
+            return &c.back();
+        }
+
+        return nullptr;
     }
 };
 };

@@ -31,3 +31,4 @@ if not ftxui_dep.found()
 endif
 
 rvm_create = executable('rvm_create', ['rvm_create.cpp'], install : true, dependencies : [rvm_dep] + ftxui)
+rvm_repl = executable('rvm_repl', ['rvm_repl.cpp'], install : true, dependencies : [rvm_dep] + ftxui)

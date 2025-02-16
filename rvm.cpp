@@ -343,18 +343,17 @@ char const* Error::what() {
 VM::VM(std::vector<Instruction> bytecode) : pc(0), stack({}), heap({}), bytecode(bytecode) {}
 
 void VM::tick(Error **error) {
-    pc += 1;
-
     Instruction instruction{InstructionKind::Last};
 
     try {
         instruction = bytecode.at(pc);
+        pc += 1;
     } catch(std::out_of_range e) {
         *error = new Error(ErrorKind::NoMoreInstructions, strdup(std::format("no more instructions. pc={}", pc).c_str()), true);
         return;
     }
     instruction.check(error);
-    if (error != nullptr) {
+    if (*error != nullptr) {
         return;
     }
 
@@ -371,20 +370,22 @@ void VM::tick(Error **error) {
             auto lhs = stack.pop();
 
             auto result = lhs.apply_operator(Operator::Add, rhs, error);
-            if (error != nullptr) {
+            if (*error != nullptr) {
                 return;
             }
             stack.push(result);
+            break;
         }
         case InstructionKind::Sub: {
             auto rhs = stack.pop();
             auto lhs = stack.pop();
 
             auto result = lhs.apply_operator(Operator::Sub, rhs, error);
-            if (error != nullptr) {
+            if (*error != nullptr) {
                 return;
             }
             stack.push(result);
+            break;
         }
         case InstructionKind::Last:
         default:

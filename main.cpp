@@ -33,6 +33,10 @@ int main(int argc, char **argv) {
         vm.tick(&error);
     }
 
-    std::cerr << "ERROR: " << error->what();
+    std::cerr << "ERROR: " << error->what() << std::endl;;
+
+    for (auto s : vm.stack.c) {
+        std::cout << s.string() << "\n";
+    }
     return 1;
 }
