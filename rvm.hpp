@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <string_view>
@@ -56,11 +57,19 @@ using Stack = internal::Stack<Object>;
 using Heap = std::vector<Object>;
 
 #define INSTRUCTION_KIND                                        \
+    /*                                                     */   \
     _X(Nop,  0) /* No operation, do nothing */                  \
-    _X(Push, 1) /* Push the following object onto the stack */  \
+    _X(Push, 1) /* Push the following object onto the stack*/   \
     /* Pops 2 values from the stack and returns the result */   \
     _X(Add, 0)                                                  \
-    _X(Sub, 0)
+    _X(Sub, 0)                                                  \
+    /* Jump to the static address in the object.           */   \
+    _X(Jmp, 1)                                                  \
+    _X(JmpIf, 1)                                                \
+    /* Same as the normal jumps but uses the object on the stack
+       The object has to be a u64 currently.               */   \
+    _X(JmpO, 0)                                                 \
+    _X(JmpIfO, 0)
 
 enum class InstructionKind: u8 {
 #define _X(kind, ...) kind,
@@ -71,6 +80,7 @@ enum class InstructionKind: u8 {
 };
 
 char const* instruction_string(const InstructionKind& kind);
+size_t instruction_argument_amount(const InstructionKind& kind);
 
 static_assert(InstructionKind::Last <= static_cast<InstructionKind>((1 << 7)), "The last bit is reserved for multi byte instructions");
 
@@ -81,6 +91,11 @@ struct Instruction {
 
     Instruction(InstructionKind kind);
     Instruction(InstructionKind kind, Object *value);
+    Instruction(Instruction const& rhs);
+    Instruction(Instruction &&rhs) noexcept;
+    Instruction& operator=(Instruction const& rhs);
+    Instruction& operator=(Instruction &&rhs);
+    ~Instruction();
 
     // Does not check if this is a valid instruction
     // Please check using the check function
@@ -101,7 +116,8 @@ enum class Operator {
 
 #define OBJECT_KIND \
     _X(U64, u64)    \
-    _X(Pointer, u64)
+    _X(Pointer, u64)\
+    _X(Bool, bool)
 
 
 enum class ObjectKind: u8 {
@@ -112,10 +128,16 @@ enum class ObjectKind: u8 {
     Last,
 };
 
+char const* object_kind_string(const ObjectKind& kind);
+
 class Object {
+    template <class T>
+    bool holds(Error **error);
 public:
-    ObjectKind        kind;
-    std::variant<u64> data;
+    ObjectKind kind;
+    std::variant<
+        u64, bool
+    > data;
 
     // Does not check if this is a valid instruction
     // Please check using the check function
@@ -160,6 +182,7 @@ enum class ErrorKind {
     // VM Execution Errors
     NoMoreInstructions,
     InvalidOperator,
+    InvalidInstructionArgument,
 };
 
 class Error {

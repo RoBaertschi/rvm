@@ -1,10 +1,10 @@
 #include "rvm.hpp"
+#include <algorithm>
 #include <cerrno>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <iostream>
 #include <stdexcept>
 #include <tuple>
 #include <type_traits>
@@ -21,6 +21,16 @@ char const* instruction_kind_string(const InstructionKind& kind) {
 #undef _X
         default:
             return "INVALID INSTRUCTION KIND";
+    }
+}
+
+size_t instruction_argument_amount(const InstructionKind& kind) {
+    switch(kind) {
+#define _X(kind, args) case InstructionKind::kind: return args;
+    INSTRUCTION_KIND
+#undef _X
+        default:
+            return 0;
     }
 }
 
@@ -45,15 +55,30 @@ std::string Instruction::string() {
 
 void Instruction::check(Error **error) {
     switch(kind) {
+        case InstructionKind::Jmp:
+        case InstructionKind::JmpIf: {
+            if (value == nullptr) {
+                *error = new Error(ErrorKind::InvalidInstruction, strdup(std::format("{} requires an object as an argument, but found none", instruction_kind_string(kind)).c_str()), true);
+                return;
+            }
+            if (value->kind != ObjectKind::U64) {
+                *error = new Error(ErrorKind::InvalidInstruction, strdup(std::format("{} requires an object argument of type U64", instruction_kind_string(kind)).c_str()), true);
+                return;
+            }
+            value->check(error);
+            return;
+        }
         case InstructionKind::Push: {
             if (value == nullptr) {
-                *error = new Error(ErrorKind::InvalidInstruction, "Push requires an object as an argument, but found none");
+                *error = new Error(ErrorKind::InvalidInstruction, strdup(std::format("{} requires an object as an argument, but found none", instruction_kind_string(kind)).c_str()), true);
                 return;
             }
             value->check(error);
             return;
         }
         case InstructionKind::Nop:
+        case InstructionKind::JmpO:
+        case InstructionKind::JmpIfO:
         case InstructionKind::Add:
         case InstructionKind::Sub: {
             if (value != nullptr) {
@@ -61,13 +86,50 @@ void Instruction::check(Error **error) {
             }
             return;
         }
-        default:
+        case InstructionKind::Last:
             *error = new Error(ErrorKind::InvalidInstruction, strdup(std::format("invalid instruction kind {}", static_cast<std::underlying_type_t<InstructionKind>>(kind)).c_str()), true);
     }
 }
 
 Instruction::Instruction(InstructionKind kind) : kind(kind), value(nullptr) {}
 Instruction::Instruction(InstructionKind kind, Object *value) : kind(kind), value(value) {}
+
+Instruction::Instruction(Instruction const& rhs) {
+    kind = rhs.kind; 
+    if (rhs.value) {
+        value = new Object(rhs.value->kind, rhs.value->data);
+    } else {
+        value = nullptr;
+    }
+}
+
+Instruction& Instruction::operator=(Instruction const& rhs) {
+    kind = rhs.kind; 
+    if (rhs.value) {
+        value = new Object(rhs.value->kind, rhs.value->data);
+    }
+
+    return *this;
+}
+
+Instruction::Instruction(Instruction &&rhs) noexcept {
+    kind = std::move(rhs.kind);
+    value = std::move(rhs.value);
+    rhs.value = nullptr;
+    rhs.kind = InstructionKind::Last; // Make it invalid
+}
+
+Instruction& Instruction::operator=(Instruction &&rhs) {
+    if (this != &rhs) {
+        if (value != nullptr) {
+            delete value;
+        }
+        value = std::move(rhs.value);
+        rhs.value = nullptr;
+        rhs.kind = InstructionKind::Last; // Make it invalid
+    }
+    return *this;
+}
 
 void Instruction::write(FILE *file, Error **error) {
     size_t write = fwrite(&kind, sizeof kind, 1, file);
@@ -109,12 +171,28 @@ bool Instruction::same(const Instruction& other) const {
     return this->value->same(*other.value);
 }
 
+Instruction::~Instruction() {
+    if (value != nullptr) delete value;
+}
+
+char const* object_kind_string(const ObjectKind& kind) {
+    switch(kind) {
+#define _X(kind, args) case ObjectKind::kind: return #kind;
+        OBJECT_KIND
+#undef _X
+        default:
+            return "INVALID INSTRUCTION KIND";
+    }
+}
+
 std::string Object::string() {
     switch (kind) {
     case ObjectKind::U64:
         return std::format("U64 {}", std::get<u64>(data));
     case ObjectKind::Pointer:
         return std::format("Pointer {}", std::get<u64>(data));
+    case ObjectKind::Bool:
+        return std::format("Bool {}", std::get<bool>(data));
     default:
         return "INVALID OBJECT KIND";
     }
@@ -128,6 +206,12 @@ void Object::write(FILE *file, Error **error) {
 
     if (std::holds_alternative<u64>(data)) {
         auto data = std::get<u64>(this->data);
+        write = fwrite(&data, sizeof data, 1, file);
+        if (write != 1) {
+            goto write_error;
+        }
+    } else if(std::holds_alternative<bool>(data)) {
+        auto data = std::get<bool>(this->data);
         write = fwrite(&data, sizeof data, 1, file);
         if (write != 1) {
             goto write_error;
@@ -158,22 +242,32 @@ bool Object::same(const Object& other) const {
     return true;
 }
 
-void Object::check(Error **error) {
+template <class T>
+bool Object::holds(Error **error) {
+    if (!std::holds_alternative<T>(data)) {
+        *error = new Error(ErrorKind::InvalidObject, strdup(
+            std::format("invalid object data, expected {}, got {}",
+                        typeid(T).name(),
+                        // NOTE: Extract to function if used twice
+                        // https://stackoverflow.com/questions/53696720/get-currently-held-typeid-of-stdvariant-like-boostvariant-type
+                        std::visit([](auto&& x)->decltype(auto){return typeid(x);}, data).name()
+                        )
+            .c_str()
+        ), true);
+        return false;
+    }
+    return true;
+}
 
+void Object::check(Error **error) {
     switch (kind) {
         case ObjectKind::U64:
         case ObjectKind::Pointer: {
-            if (!std::holds_alternative<u64>(data)) {
-                *error = new Error(ErrorKind::InvalidObject, strdup(
-                    std::format("invalid object data, expected u64, got {}",
-                                // NOTE: Extract to function if used twice
-                                // https://stackoverflow.com/questions/53696720/get-currently-held-typeid-of-stdvariant-like-boostvariant-type
-                                std::visit([](auto&& x)->decltype(auto){return typeid(x);}, data).name()
-                                )
-                    .c_str()
-                ), true);
-                return;
-            }
+            holds<u64>(error);
+            break;
+        }
+        case ObjectKind::Bool: {
+            holds<bool>(error);
             break;
         }
         default:
@@ -185,8 +279,19 @@ void Object::check(Error **error) {
 }
 
 Object Object::apply_operator(Operator op, Object rhs, Error **error) {
+    if (!std::holds_alternative<u64>(data)) {
+        *error = new Error(ErrorKind::InvalidOperator, "operators not supported for Bool");
+        return Object();
+    }
+
+    if (!std::holds_alternative<u64>(rhs.data)) {
+        *error = new Error(ErrorKind::InvalidOperator, "operators not supported for Bool");
+        return Object();
+    }
+
     if (kind != rhs.kind) {
         *error = new Error(ErrorKind::InvalidOperator, "object are not of same type");
+        return Object();
     }
 
     u64 lhs_data = std::get<u64>(data);
@@ -228,6 +333,8 @@ std::vector<Instruction> bytecode_from_file(FILE *file, Error **error) {
         InstructionKind instruction = static_cast<InstructionKind>(read_instruction);
 
         switch (instruction) {
+            case InstructionKind::Jmp:
+            case InstructionKind::JmpIf:
             case InstructionKind::Push: {
                 // Read object
                 auto obj = object_from_file(file, error);
@@ -238,13 +345,16 @@ std::vector<Instruction> bytecode_from_file(FILE *file, Error **error) {
                 break;
             }
             case InstructionKind::Nop:
+            case InstructionKind::JmpO:
+            case InstructionKind::JmpIfO:
             case InstructionKind::Add:
             case InstructionKind::Sub:
                 instructions.push_back(Instruction(instruction));
                 break;
             case InstructionKind::Last:
                 break;
-        }
+              break;
+            }
     }
 
 
@@ -292,9 +402,18 @@ Object *object_from_file(FILE *file, Error **error) {
             object = new Object(object_kind, obj_u64);
             break;
         }
+        case ObjectKind::Bool: {
+            u8 obj_bool;
+            read = fread(&obj_bool, sizeof(obj_bool), 1, file);
+            if (read != 1) {
+                goto error;
+            }
+            object = new Object(object_kind, obj_bool != 0);
+            break;
+        }
         case ObjectKind::Last:
             std::abort();
-    }
+        }
 
     *error = nullptr;
     return object;
@@ -388,9 +507,65 @@ void VM::tick(Error **error) {
             stack.push(result);
             break;
         }
-        case InstructionKind::Last:
-        default:
+        case InstructionKind::Jmp: {
+            if(instruction.value->kind != ObjectKind::U64) {
+                *error = new Error(ErrorKind::InvalidInstructionArgument, strdup(std::format("the instruction object at {} is not a U64", pc).c_str()), true);
+                return;
+            }
+
+            pc = std::get<u64>(instruction.value->data);
+            break;
+        }
+        case InstructionKind::JmpIf: {
+            auto cond = stack.pop();
+            if(instruction.value->kind != ObjectKind::U64) {
+                *error = new Error(ErrorKind::InvalidInstructionArgument, strdup(std::format("the instruction object at {} is not a U64", pc).c_str()), true);
+                return;
+            }
+
+            if (cond.kind != ObjectKind::Bool) {
+                *error = new Error(ErrorKind::InvalidInstructionArgument, strdup(std::format("the instruction object at {} is not a Bool", pc).c_str()), true);
+                return;
+            }
+
+            if (std::get<bool>(cond.data)) {
+                pc = std::get<u64>(instruction.value->data);
+            }
+            break;
+        }
+        case InstructionKind::JmpO: {
+            auto address = stack.pop();
+
+            if (address.kind != ObjectKind::U64) {
+                *error = new Error(ErrorKind::InvalidInstructionArgument, strdup(std::format("the instruction object at {} is not a U64", pc).c_str()), true);
+                return;
+            }
+
+            pc = std::get<u64>(address.data);
+            break;
+        }
+        case InstructionKind::JmpIfO: {
+            auto address = stack.pop();
+            auto cond = stack.pop();
+
+            if (address.kind != ObjectKind::U64) {
+                *error = new Error(ErrorKind::InvalidInstructionArgument, strdup(std::format("the instruction object at {} is not a U64", pc).c_str()), true);
+                return;
+            }
+            if (cond.kind != ObjectKind::Bool) {
+                *error = new Error(ErrorKind::InvalidInstructionArgument, strdup(std::format("the instruction object at {} is not a Bool", pc).c_str()), true);
+                return;
+            }
+
+            if (std::get<bool>(cond.data)) {
+                pc = std::get<u64>(address.data);
+            }
+            break;
+        }
+        case InstructionKind::Last: {
             abort();
+            break;
+        }
     }
 }
 
