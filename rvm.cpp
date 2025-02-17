@@ -349,7 +349,7 @@ void VM::tick(Error **error) {
     try {
         instruction = bytecode.at(pc);
         pc += 1;
-    } catch(std::out_of_range e) {
+    } catch(std::out_of_range) {
         *error = new Error(ErrorKind::NoMoreInstructions, strdup(std::format("no more instructions. pc={}", pc).c_str()), true);
         return;
     }

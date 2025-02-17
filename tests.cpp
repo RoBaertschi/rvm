@@ -2,6 +2,7 @@
 #include <cerrno>
 #include <csetjmp>
 #include <csignal>
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 #include <exception>
@@ -55,11 +56,11 @@ struct Context {
         return 0;
     }
 
-    int end(int result) {
+    int end(int result, size_t index, size_t test_num) {
         if (result) {
             std::cerr << "TEST " << current_test << " " RED_FG "❌" RESET " " << result << std::endl;
         } else {
-            std::cerr << "TEST " << current_test << " " GREEN_FG "✅" RESET << std::endl;
+            std::cerr << std::format("[{}/{}] ", index+1, test_num) << "TEST " << current_test << " " GREEN_FG "✅" RESET << std::endl;
         }
         return result;
     }
@@ -68,13 +69,13 @@ struct Context {
 #define HANDLE_ERROR(error, prefix) do {            \
     int result = ctx->handle_error(error, prefix);  \
     if (result != 0) {                              \
-        return ctx->end(result);                    \
+        return result;                    \
     }                                               \
 } while(0)
 
 #define ASSERT(expr) if (!(expr)) {\
     ctx->fail(std::format("assertion failed: ({})", #expr));\
-    return ctx->end(1);\
+    return 1;\
 }
 
 int parse_bytecode_correctly(Context *ctx) {
@@ -103,7 +104,29 @@ int parse_bytecode_correctly(Context *ctx) {
 
     ASSERT(bytecode == instructions);
 
-    return ctx->end(0);
+    return 0;
+}
+
+int add_2_values(Context *ctx) {
+    ctx->begin("add_2_values");
+    std::vector<rvm::Instruction> instructions{
+        { rvm::InstructionKind::Push, new rvm::Object{rvm::ObjectKind::U64, static_cast<rvm::u32>(1)} },
+        { rvm::InstructionKind::Push, new rvm::Object{rvm::ObjectKind::U64, static_cast<rvm::u32>(1)} },
+        rvm::InstructionKind::Add,
+    };
+
+    rvm::VM vm{instructions};
+
+    rvm::Error *error = nullptr;
+    vm.tick(&error);
+    HANDLE_ERROR(error, "unexpected vm error: ");
+    vm.tick(&error);
+    HANDLE_ERROR(error, "unexpected vm error: ");
+    vm.tick(&error);
+    HANDLE_ERROR(error, "unexpected vm error: ");
+
+    ASSERT(vm.stack.top()->same(rvm::Object{rvm::ObjectKind::U64, static_cast<rvm::u64>(2)}));
+    return 0;
 }
 
 std::jmp_buf signal_jmp_buf;
@@ -124,12 +147,14 @@ int main() {
     signal(SIGSEGV, signal_handler);
 
     std::vector<std::function<int(Context*)>> tests{
-        parse_bytecode_correctly
+        parse_bytecode_correctly,
+        add_2_values,
     };
 
-    for(auto test : tests) {
+    for(size_t i = 0; i < tests.size(); i++) {
+        auto test = tests[i];
         try {
-            int result = test(&ctx);
+            int result = ctx.end(test(&ctx), i, tests.size());
             if (result != 0) {
                 return result;
             }

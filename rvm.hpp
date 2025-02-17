@@ -83,7 +83,7 @@ struct Instruction {
     Instruction(InstructionKind kind, Object *value);
 
     // Does not check if this is a valid instruction
-    // FIXME(robin): Add validation of instruction, optionally or required
+    // Please check using the check function
     void write(FILE *file, Error **error);
 
     bool same(const Instruction& other) const;
@@ -118,7 +118,7 @@ public:
     std::variant<u64> data;
 
     // Does not check if this is a valid instruction
-    // FIXME(robin): Add validation of instruction, optionally or required
+    // Please check using the check function
     void write(FILE *file, Error **error);
 
     bool same(const Object& other) const;
