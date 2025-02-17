@@ -138,28 +138,34 @@ int main() {
         vm->bytecode.push_back(i);
     });
     auto vms = vm_state(vm);
-    screen.Loop(Container::Vertical({
-        create_instruction,
-        Button("Tick", [=]{
-            rvm::Error* error = nullptr;
-            vm->tick(&error);
+    screen.Loop(
+        ConfirmQuit(
+            Container::Vertical({
+                create_instruction,
+                Button("Tick", [=]{
+                    rvm::Error* error = nullptr;
+                    vm->tick(&error);
 
-            if (error != nullptr) {
-                *error_string = error->what();
-                delete error;
-            }
-        }) | size(HEIGHT, GREATER_THAN, 0),
-        Renderer([&]{ return text(*error_string) | color(Color::Red); }) | size(HEIGHT, GREATER_THAN, 0),
-        vms | size(HEIGHT, EQUAL, 10),
-        Scroller(Renderer([=] {
-            std::vector<Element> elements{};
+                    if (error != nullptr) {
+                        *error_string = error->what();
+                        delete error;
+                    }
+                }) | size(HEIGHT, GREATER_THAN, 0),
+                Renderer([&]{ return text(*error_string) | color(Color::Red); }) | size(HEIGHT, GREATER_THAN, 0),
+                vms | size(HEIGHT, EQUAL, 10),
+                Scroller(Renderer([=] {
+                    std::vector<Element> elements{};
 
-            for (size_t i = 0; i < vm->bytecode.size(); i++) {
-                elements.push_back(text(std::format("{} - {}", i, vm->bytecode[i].string())));
-            }
+                    for (size_t i = 0; i < vm->bytecode.size(); i++) {
+                        elements.push_back(text(std::format("{} - {}", i, vm->bytecode[i].string())));
+                    }
 
-            return vbox(elements) | size(HEIGHT, GREATER_THAN, 0);
-        })) | border,
-    }));
+                    return vbox(elements) | size(HEIGHT, GREATER_THAN, 0);
+                })) | border,
+            }),
+            "Are you sure? You will lose all of the VM state.",
+            &screen
+        )
+        );
     return 0;
 }

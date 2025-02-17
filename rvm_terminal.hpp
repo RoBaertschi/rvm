@@ -2,6 +2,7 @@
 
 #include "ftxui/component/component.hpp"
 #include "ftxui/component/component_base.hpp"
+#include "ftxui/component/screen_interactive.hpp"
 #include "ftxui/dom/elements.hpp"
 #include "rvm.hpp"
 #include <format>
@@ -150,4 +151,52 @@ public:
 
 inline ftxui::Component InstructionBuilder(std::function<void(rvm::Instruction)> on_add) {
     return ftxui::Make<InstructionBuilderBase>(std::move(on_add));
+}
+
+inline ftxui::Component QuitModal(std::string quit_message, bool *show, ftxui::ScreenInteractive *screen) {
+    auto confirm_button = ftxui::Button("Confirm", [screen] {
+        screen->ExitLoopClosure()();
+    });
+    auto cancel_button = ftxui::Button("Cancel", [show] {
+        *show = false;
+    });
+
+    return ftxui::Renderer(
+        ftxui::Container::Horizontal({confirm_button, cancel_button}),
+        [confirm_button, cancel_button, quit_message] {
+            return ftxui::vbox({
+                ftxui::text(quit_message) | ftxui::center,
+                ftxui::hbox({
+                    confirm_button->Render() | ftxui::flex_grow,
+                    cancel_button->Render() | ftxui::flex_grow,
+                }),
+            });
+        }
+    ) | ftxui::border;
+}
+
+inline ftxui::Component ConfirmQuit(ftxui::Component child, std::string quit_message, ftxui::ScreenInteractive *screen) {
+    struct Impl : ftxui::ComponentBase {
+        bool show = false;
+
+        Impl(ftxui::Component child,
+             std::string quit_message,
+             ftxui::ScreenInteractive *screen) {
+            auto event_handler = CatchEvent(
+                child | Modal(
+                    QuitModal(quit_message, &show, screen),
+                    &show),
+                [=, this](ftxui::Event event) {
+                    if (event == ftxui::Event::Character('q')) {
+                        show = true;
+                        return true;
+                    }
+                    return false;
+            });
+
+            Add(event_handler);
+        }
+    };
+
+    return ftxui::Make<Impl>(child, quit_message, screen);
 }
