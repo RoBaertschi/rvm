@@ -30,8 +30,8 @@ private:
         return dbox({
             std::move(background),
             vbox({
-                text(L"") | size(HEIGHT, EQUAL, selected_),
-                text(L"") | style | focused,
+                text("") | size(HEIGHT, EQUAL, selected_),
+                text("") | style | focused,
             }),
         }) |
         vscroll_indicator | yframe | yflex | reflect(box_);

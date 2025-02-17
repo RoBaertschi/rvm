@@ -4,6 +4,7 @@ project('rvm', 'cpp',
 
 rvm_lib = library('rvm', ['rvm.cpp'], install: true)
 rvm_inc = include_directories('.')
+install_headers('rvm.hpp')
 rvm_dep = declare_dependency(link_with : [rvm_lib], include_directories : [rvm_inc])
 
 executable('rvm',
