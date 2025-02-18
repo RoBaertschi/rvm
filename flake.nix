@@ -52,7 +52,7 @@
           buildInputs = with pkgs; [
             llvm.libcxx
             llvm.libllvm
-            gdb
+            llvm.lldb
 
             clang-tools
             meson

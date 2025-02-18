@@ -54,90 +54,11 @@ struct ConsoleUI {
 
     std::vector<rvm::Instruction> instructions{};
 
-    /*Component create_instruction() {*/
-    /*    Component instructions_radio = Radiobox(&instruction_kinds, &selected_instruction);*/
-    /*    Component add_instruction = Button("Add", [=, this]{*/
-    /*        rvm::InstructionKind kind = static_cast<rvm::InstructionKind>(selected_instruction);*/
-    /**/
-    /*        if (rvm::instruction_argument_amount(kind) == 0) {*/
-    /*            instructions.push_back(*/
-    /*                kind*/
-    /*            );*/
-    /*        } else {*/
-    /*            instructions.push_back(*/
-    /*                rvm::Instruction{kind, new rvm::Object(static_cast<rvm::ObjectKind>(selected_object), object_input_value)}*/
-    /*            );*/
-    /*        }*/
-    /**/
-    /*        rebuild_instruction_list();*/
-    /*    });*/
-    /*    Component ins = Container::Vertical({instructions_radio, add_instruction});*/
-    /*    Component instructions_radio_renderer = Renderer(ins, [=] {*/
-    /*        return vbox({*/
-    /*            text("Instruction"),*/
-    /*            separator(),*/
-    /*            instructions_radio->Render(),*/
-    /*            add_instruction->Render(),*/
-    /*        });*/
-    /*    });*/
-    /**/
-    /*    Component object_radio = Radiobox(&object_kinds, &selected_object);*/
-    /*    Component object_input_field = Wrap("Input", Input(&object_input) | border);*/
-    /*    Component object_creation = Container::Horizontal({ object_radio, object_input_field });*/
-    /*    Component object_input_invalid = Renderer([]{ return text("Only Numbers are valid!") | color(Color::Palette16::Red); }) | Maybe(&is_object_input_invalid);*/
-    /*    Component object_creation_renderer = Renderer(*/
-    /*        object_creation,*/
-    /*        [=, this] {*/
-    /*        rvm::u64 value = 0;*/
-    /*        auto result = std::from_chars(object_input.data(), object_input.data() + object_input.length(), value);*/
-    /*        is_object_input_invalid = result.ec != std::errc{};*/
-    /*        if (!is_object_input_invalid) {*/
-    /*            object_input_value = value;*/
-    /*        }*/
-    /*        return vbox({*/
-    /*            text("Object Kind"),*/
-    /*            separator(),*/
-    /*            hbox({*/
-    /*                object_radio->Render(),*/
-    /*                emptyElement() | size(WIDTH, EQUAL, 4),*/
-    /*                vbox({*/
-    /*                    object_input_field->Render(),*/
-    /*                    object_input_invalid->Render() | size(HEIGHT, GREATER_THAN, 1),*/
-    /*                    text(std::format("Result: {}", object_input_value))*/
-    /*                }) | flex*/
-    /*            })*/
-    /*        });*/
-    /*    });*/
-    /*    Component object_create = Either(*/
-    /*        object_creation_renderer,*/
-    /*        Renderer([] { return text("Select a instruction kind with a object argument."); }),*/
-    /*        [=, this] {*/
-    /*            return rvm::instruction_argument_amount(static_cast<rvm::InstructionKind>(selected_instruction)) > 0;*/
-    /*        }*/
-    /*    );*/
-    /*    Component preview = Renderer([=, this] {*/
-    /*        return paragraph(*/
-    /*            std::format("{}{}",*/
-    /*                        instruction_kinds[selected_instruction],*/
-    /*                        rvm::instruction_argument_amount(static_cast<rvm::InstructionKind>(selected_instruction)) > 0*/
-    /*                        ? std::format(" {} {}", object_kinds[selected_object], object_input_value)*/
-    /*                        : ""*/
-    /*            )*/
-    /*        ) | center;*/
-    /*    });*/
-    /*    Component create_instruction = ResizableSplitLeft(*/
-    /*        instructions_radio_renderer,*/
-    /*        ResizableSplitLeft(object_create, preview, &radio_obj_split),*/
-    /*        &radio_inst_split*/
-    /*    );*/
-    /**/
-    /**/
-    /*    return create_instruction;*/
-    /*}*/
 
     Component create_instruction() {
         return InstructionBuilder([this](rvm::Instruction i){
             instructions.push_back(i);
+            rebuild_instruction_list();
         });
     }
 
