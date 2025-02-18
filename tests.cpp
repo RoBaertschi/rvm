@@ -85,7 +85,7 @@ int parse_bytecode_correctly(Context *ctx) {
         rvm::InstructionKind::Nop,
         rvm::InstructionKind::Add,
         rvm::InstructionKind::Sub,
-        { rvm::InstructionKind::Push, new rvm::Object{rvm::ObjectKind::U64, static_cast<rvm::u32>(1)} }
+        { rvm::InstructionKind::Push, new rvm::Object{rvm::ObjectKind::U64, static_cast<rvm::u64>(1)} }
     };
 
     FILE *file = tmpfile();
@@ -114,8 +114,8 @@ int parse_bytecode_correctly(Context *ctx) {
 int add_2_values(Context *ctx) {
     ctx->begin("add_2_values");
     std::vector<rvm::Instruction> instructions{
-        { rvm::InstructionKind::Push, new rvm::Object{rvm::ObjectKind::U64, static_cast<rvm::u32>(1)} },
-        { rvm::InstructionKind::Push, new rvm::Object{rvm::ObjectKind::U64, static_cast<rvm::u32>(1)} },
+        { rvm::InstructionKind::Push, new rvm::Object{rvm::ObjectKind::U64, static_cast<rvm::u64>(1)} },
+        { rvm::InstructionKind::Push, new rvm::Object{rvm::ObjectKind::U64, static_cast<rvm::u64>(1)} },
         rvm::InstructionKind::Add,
     };
 
