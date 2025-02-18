@@ -89,6 +89,10 @@ int parse_bytecode_correctly(Context *ctx) {
     };
 
     FILE *file = tmpfile();
+    if (!file) {
+        ctx->fail(std::format("could not open file because {}", strerror(errno)));
+        return 2;
+    }
     defer(fclose(file));
 
     rvm::Error *error = nullptr;

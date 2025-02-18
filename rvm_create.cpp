@@ -82,7 +82,7 @@ struct ConsoleUI {
 
         // Edit selected entry
         auto remove = Button("Remove", [this] {
-            if (selected < 0 || static_cast<size_t>(selected) >= instructions.size()) {return;}
+            if (selected < 0 || static_cast<size_t>(selected) >= instructions.size()) { return; }
 
             instructions.erase(instructions.begin() + selected);
             rebuild_instruction_list();

@@ -306,10 +306,11 @@ Object Object::apply_operator(Operator op, Object rhs, Error **error) {
 
 std::vector<Instruction> bytecode_from_file(std::string_view filename, Error **error) {
     FILE* file = fopen(filename.data(), "r");
-    if (file == nullptr) {
+    if (file == NULL) {
         *error = new Error(ErrorKind::FileNotFound, strerror(errno));
         return {};
     }
+    defer(fclose(file));
     return bytecode_from_file(file, error);
 }
 
