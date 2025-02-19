@@ -32,11 +32,11 @@
         ];
 
         enableParallelBuilding = true;
-        # meta = with nixpkgs.lib; {
-        #   homepage = "https://github.com/RoBaertschi/rvm";
-        #   license = with licenses; [mit];
-        #   maintainers = ["Robin Bärtschi"];
-        # };
+        meta = with nixpkgs.lib; {
+          homepage = "https://github.com/RoBaertschi/rvm";
+          license = with licenses; [mit];
+          maintainers = ["Robin Bärtschi"];
+        };
       };
     });
 
