@@ -52,7 +52,7 @@
           buildInputs = with pkgs; [
             llvm.libcxx
             llvm.libllvm
-            llvm.lldb
+            (if (system == "aarch64-darwin") then llvm.lldb else gdb)
 
             clang-tools
             meson

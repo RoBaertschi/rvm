@@ -1,5 +1,4 @@
 #include "rvm.hpp"
-#include <algorithm>
 #include <cerrno>
 #include <cstddef>
 #include <cstdio>
