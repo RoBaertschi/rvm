@@ -114,6 +114,7 @@ struct ConsoleUI {
             defer(fclose(file));
 
             rvm::Error *error = nullptr;
+            defer(if (error != nullptr) delete error;);
 
             for (auto instruction : instructions) {
                 instruction.write(file, &error);
@@ -126,7 +127,6 @@ struct ConsoleUI {
                 }
             }
 
-            defer(if (error != nullptr) delete error;);
         });
 
         return Renderer(
