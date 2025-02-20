@@ -11,7 +11,7 @@ executable('rvm',
            ['main.cpp'],
            install : true, dependencies : [rvm_dep])
 
-tests = executable('rvm_tests', ['tests.cpp'], dependencies : [rvm_dep])
+tests = executable('rvm-tests', ['tests.cpp'], dependencies : [rvm_dep])
 
 test('rvm tests', tests)
 
@@ -31,5 +31,6 @@ if not ftxui_dep.found()
   ]
 endif
 
-rvm_create = executable('rvm_create', ['rvm_create.cpp'], install : true, dependencies : [rvm_dep] + ftxui)
-rvm_repl = executable('rvm_repl', ['rvm_repl.cpp'], install : true, dependencies : [rvm_dep] + ftxui)
+rvm_create = executable('rvm-create', ['rvm_create.cpp'], install : true, dependencies : [rvm_dep] + ftxui)
+rvm_repl = executable('rvm-repl', ['rvm_repl.cpp'], install : true, dependencies : [rvm_dep] + ftxui)
+rvm_as = executable('rvm-as', ['rvm_as.cpp'], install : true, dependencies : [rvm_dep])
