@@ -64,11 +64,11 @@ using Heap = std::vector<Object>;
     _X(Add, 0)                                                  \
     _X(Sub, 0)                                                  \
     /* Jump to the static address in the object.           */   \
-    _X(Jmp, 1)                                                  \
+    _X(Jmp,   1)                                                \
     _X(JmpIf, 1)                                                \
     /* Same as the normal jumps but uses the object on the stack
        The object has to be a u64 currently.               */   \
-    _X(JmpO, 0)                                                 \
+    _X(JmpO,   0)                                               \
     _X(JmpIfO, 0)
 
 enum class InstructionKind: u8 {

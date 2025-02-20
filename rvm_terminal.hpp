@@ -174,7 +174,7 @@ public:
             }
         );
 
-        auto editor = Select([=, this] { return (size_t) selected_instruction; }, {
+        auto editor = Select([=, this] { return static_cast<size_t>(selected_object); }, {
             u64_editor, u64_editor, bool_editor
         });
 
